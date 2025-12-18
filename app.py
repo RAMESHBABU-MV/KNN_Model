@@ -4,85 +4,99 @@ import numpy as np
 import pandas as pd
 import time
 
-# --- 1. CONFIG & ASSETS ---
+# --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="Purchase Predictor Pro", 
     page_icon="🎯", 
     layout="centered"
 )
 
-# Use caching so the model doesn't reload on every interaction
+# --- 2. MODEL LOADING (With Caching) ---
 @st.cache_resource
 def load_model():
     try:
+        # Ensure 'knn_model.pkl' is in the same folder
         return joblib.load('knn_model.pkl')
-    except FileNotFoundError:
+    except Exception as e:
         return None
 
 model = load_model()
 
-# --- 2. STYLING ---
+# --- 3. CUSTOM STYLING ---
+# Fixed the 'unsafe_allow_html' parameter here
 st.markdown("""
     <style>
     .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 8px; 
+        height: 3em; 
+        background-color: #007bff; 
+        color: white;
+        font-weight: bold;
+    }
+    .stNumberInput, .stSlider {
+        margin-bottom: 20px;
+    }
     </style>
-    """, unsafe_placeholder=True)
+    """, unsafe_allow_html=True)
 
-# --- 3. UI LAYOUT ---
+# --- 4. HEADER ---
 st.title("🎯 Targeted Ad Predictor")
-st.info("This tool uses Machine Learning (KNN) to predict customer behavior based on demographic data.")
+st.write("Determine if a customer is likely to purchase based on age and estimated income.")
+st.divider()
 
+# Check if model loaded successfully
 if model is None:
-    st.error("⚠️ Error: 'knn_model.pkl' not found. Please ensure the model file is in the script directory.")
+    st.error("❌ **Model File Not Found:** Please ensure `knn_model.pkl` is in your repository/folder.")
+    st.info("If you are running this locally, check your file path. If on Streamlit Cloud, make sure you committed the .pkl file to GitHub.")
     st.stop()
 
-with st.expander("ℹ️ How it works", expanded=False):
-    st.write("""
-        The model analyzes the **Age** and **Salary** provided and compares them to 
-        historical data points to find the most similar customer profiles.
-    """)
-
-# Using a container for a cleaner look
+# --- 5. USER INPUTS ---
 with st.container():
     col1, col2 = st.columns(2)
+    
     with col1:
-        age = st.slider("Customer Age", 18, 100, 30)
+        age = st.slider("Customer Age", min_value=18, max_value=100, value=30)
+    
     with col2:
-        salary = st.number_input("Estimated Annual Salary ($)", 1000, 200000, 50000, 500.0)
+        salary = st.number_input("Annual Salary ($)", min_value=1000, max_value=200000, value=50000, step=1000)
 
-# --- 4. PREDICTION LOGIC ---
-if st.button("Generate Prediction"):
-    with st.spinner('Analyzing patterns...'):
-        time.sleep(0.5) # Brief pause for UX feel
+# --- 6. PREDICTION LOGIC ---
+if st.button("Analyze Customer Profile"):
+    # Show a progress bar for visual effect
+    with st.spinner('Calculating probabilities...'):
+        time.sleep(0.6)
         
-        # Prepare features
+        # Format input for the model
         features = np.array([[age, salary]])
         
-        # Get prediction and probability (if your model supports it)
+        # Make prediction
         prediction = model.predict(features)[0]
         
-        # Try to get probability for a "Confidence Score"
+        # Calculate confidence if the model supports it
         try:
-            prob = model.predict_proba(features)[0]
-            confidence = max(prob) * 100
+            probabilities = model.predict_proba(features)[0]
+            confidence = np.max(probabilities) * 100
         except:
             confidence = None
 
-    # --- 5. RESULTS DISPLAY ---
-    st.subheader("Analysis Result")
+    # --- 7. DISPLAY RESULTS ---
+    st.subheader("Result:")
     
     if prediction == 1:
-        st.success(f"### Likely to Purchase! ✅")
-        if confidence:
-            st.write(f"Confidence Level: **{confidence:.1f}%**")
+        st.success("### ✅ Likely to Purchase")
+        st.balloons()
     else:
-        st.error(f"### Unlikely to Purchase. ❌")
-        if confidence:
-            st.write(f"Confidence Level: **{confidence:.1f}%**")
+        st.error("### ❌ Unlikely to Purchase")
 
-    # Visualizing the input relative to a standard range
-    st.write("---")
-    st.caption("Input Data Summary")
-    chart_data = pd.DataFrame([[age, salary / 2000]], columns=['Age', 'Salary (Scaled)'])
-    st.bar_chart(chart_data.T)
+    # Display Confidence Score if available
+    if confidence:
+        st.write(f"**Model Confidence:** {confidence:.2f}%")
+        st.progress(confidence / 100)
+
+    # Simple Visual Context
+    st.divider()
+    st.caption("Input Summary Reference")
+    summary_df = pd.DataFrame({"Metric": ["Age", "Salary"], "Value": [age, salary]})
+    st.table(summary_df)
